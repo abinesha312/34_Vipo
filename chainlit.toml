@@ -1,0 +1,5 @@
+title = "Vipo — Banking Policy RAG"
+port = 8000
+[UI]
+theme = "dark"
+

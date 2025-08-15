@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vipo Banking Knowledge Base</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5; /* Light gray background */
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #1A1F71; /* Light Blue */
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: #F7B600; /* Gold */
+            color: #1A1F71; /* Light Blue */
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .stat-card h3 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        .stat-card p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
+        .upload-section {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            border: 2px dashed #dee2e6;
+        }
+        
+        .upload-section h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .file-input {
+            display: none;
+        }
+        
+        .upload-btn {
+            background: #1A1F71; /* Light Blue */
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: transform 0.2s;
+            display: block;
+            margin: 0 auto;
+        }
+        
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            background: #15184f; /* Slightly darker blue on hover */
+        }
+        
+        .file-list {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .documents-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .documents-section h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .document-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #1A1F71; /* Light Blue */
+        }
+        
+        .document-info {
+            flex: 1;
+        }
+        
+        .document-name {
+            font-weight: bold;
+            color: #1A1F71; /* Light Blue */
+            margin-bottom: 5px;
+        }
+        
+        .document-meta {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+        
+        .delete-btn {
+            background: #F7B600; /* Gold */
+            color: #1A1F71; /* Light Blue */
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        
+        .delete-btn:hover {
+            background: #e5a800; /* Slightly darker gold */
+            transform: translateY(-2px);
+        }
+        
+        .actions {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .action-btn {
+            background: #F7B600; /* Gold */
+            color: #1A1F71; /* Light Blue */
+            border: none;
+            padding: 12px 25px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            margin: 0 10px;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            background: #e5a800; /* Slightly darker gold on hover */
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1A1F71; /* Light Blue */
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            display: none;
+        }
+        
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Vipo Policy Assistant</h1>
+            <p>Policy Document management</p>
+        </div>
+        
+        <div class="content">
+            <!-- Stats Section -->
+            <div class="stats-grid" id="statsGrid">
+                <div class="stat-card">
+                    <h3 id="totalDocs">-</h3>
+                        <p>Total Documents</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="totalChunks">-</h3>
+                    <p>Total Chunks</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="vectorSize">-</h3>
+                    <p>Vector DB (MB)</p>
+                </div>
+                <div class="stat-card">
+                    <h3 id="lastUpdated">-</h3>
+                        <p>Last Updated</p>
+                </div>
+            </div>
+            
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <h3>📁 Upload Documents</h3>
+                <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.txt">
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                    Choose Files
+                    </button>
+                <div class="file-list" id="fileList"></div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="actions">
+                <button class="action-btn" onclick="reprocessDocuments()">
+                    🔄 Reprocess All Documents
+                </button>
+            </div>
+
+        <!-- Documents List -->
+            <div class="documents-section">
+                <h3>📚 Document Library</h3>
+                <div id="documentsList"></div>
+            </div>
+            
+            <!-- Loading -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing documents...</p>
+            </div>
+            
+            <!-- Alerts -->
+            <div class="alert alert-success" id="successAlert"></div>
+            <div class="alert alert-error" id="errorAlert"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let selectedFiles = [];
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshStats();
+            loadDocuments();
+            
+            // File input change handler
+            document.getElementById('fileInput').addEventListener('change', function(e) {
+                selectedFiles = Array.from(e.target.files);
+                displaySelectedFiles();
+            });
+        });
+        
+        // Display selected files
+        function displaySelectedFiles() {
+            const fileList = document.getElementById('fileList');
+            if (selectedFiles.length === 0) {
+                fileList.innerHTML = '<p>No files selected</p>';
+                return;
+            }
+            
+            let html = '<h4>Selected Files:</h4>';
+            selectedFiles.forEach(file => {
+                html += `<p>📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)</p>`;
+            });
+            html += '<button class="action-btn" onclick="uploadFiles()">🚀 Upload & Process</button>';
+            fileList.innerHTML = html;
+        }
+        
+        // Upload files
+        async function uploadFiles() {
+            if (selectedFiles.length === 0) return;
+            
+            showLoading(true, "Uploading and processing documents...");
+            hideAlerts();
+            
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    const fileCount = result.uploaded_files ? result.uploaded_files.length : 0;
+                    const chunkCount = result.chunks_added || 0;
+                    showAlert('success', `Successfully uploaded and processed ${fileCount} files! Created ${chunkCount} chunks.`);
+                    selectedFiles = [];
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('fileList').innerHTML = '';
+                    // Automatically refresh stats and documents
+                    refreshStats();
+                    loadDocuments();
+                } else {
+                    showAlert('error', `Upload failed: ${result.detail}`);
+                }
+            } catch (error) {
+                showAlert('error', `Upload error: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Reprocess documents
+        async function reprocessDocuments() {
+            showLoading(true, "Reprocessing all documents...");
+            hideAlerts();
+            
+            try {
+                const response = await fetch('/api/reprocess', {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', `Successfully reprocessed ${result.chunks_processed} chunks from ${result.documents_processed} documents!`);
+                    // Automatically refresh stats and documents
+                    refreshStats();
+                    loadDocuments();
+                } else {
+                    showAlert('error', `Reprocessing failed: ${result.detail}`);
+                }
+            } catch (error) {
+                showAlert('error', `Reprocessing error: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+
+        
+        // Refresh statistics
+        async function refreshStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+                
+                document.getElementById('totalDocs').textContent = stats.total_documents;
+                document.getElementById('totalChunks').textContent = stats.total_chunks;
+                document.getElementById('vectorSize').textContent = stats.vector_db_size_mb;
+                
+                const lastUpdated = new Date(stats.last_updated);
+                document.getElementById('lastUpdated').textContent = lastUpdated.toLocaleDateString();
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load documents list
+        async function loadDocuments() {
+            try {
+                const response = await fetch('/api/documents');
+                const data = await response.json();
+                
+                const documentsList = document.getElementById('documentsList');
+                if (data.documents.length === 0) {
+                    documentsList.innerHTML = '<p>No documents found</p>';
+                    return;
+                }
+                
+                let html = '';
+                data.documents.forEach(doc => {
+                    html += `
+                        <div class="document-item">
+                            <div class="document-info">
+                                <div class="document-name">${doc.name}</div>
+                                <div class="document-meta">
+                                    ${doc.type} • ${doc.size_mb} MB • Modified: ${new Date(doc.modified).toLocaleDateString()}
+                                </div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteDocument('${doc.name}')">🗑️ Delete</button>
+                        </div>
+                    `;
+                });
+                documentsList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading documents:', error);
+            }
+        }
+        
+        // Delete document
+        async function deleteDocument(filename) {
+            if (!confirm(`Are you sure you want to delete "${filename}"?\n\nThis will remove the file and all its chunks from the vector database.`)) return;
+            
+            showLoading(true, `Deleting ${filename}...`);
+            hideAlerts();
+            
+            try {
+                const response = await fetch(`/api/documents/${filename}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    const chunkCount = result.chunks_removed || 0;
+                    showAlert('success', `Successfully deleted ${filename} and removed ${chunkCount} chunks from vector database!`);
+                    // Automatically refresh stats and documents
+                    refreshStats();
+                    loadDocuments();
+                } else {
+                    showAlert('error', `Deletion failed: ${result.detail}`);
+                }
+            } catch (error) {
+                showAlert('error', `Deletion error: ${error.message}`);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Utility functions
+        function showLoading(show, message = "Processing documents...") {
+            const loadingElement = document.getElementById('loading');
+            if (show) {
+                loadingElement.querySelector('p').textContent = message;
+                loadingElement.style.display = 'block';
+            } else {
+                loadingElement.style.display = 'none';
+            }
+        }
+        
+        function showAlert(type, message) {
+            const alert = document.getElementById(`${type}Alert`);
+            alert.textContent = message;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+        
+        function hideAlerts() {
+            document.getElementById('successAlert').style.display = 'none';
+            document.getElementById('errorAlert').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

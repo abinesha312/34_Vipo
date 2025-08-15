@@ -1,0 +1,40 @@
+# Environment variables and secrets
+.env
+.env.*
+*.pem
+
+# Virtual environments
+.venv
+venv/
+ENV/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Node.js
+node_modules/
+
+# Chainlit
+.chainlit/
+config.toml
+
+# Chroma database
+.chroma/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db

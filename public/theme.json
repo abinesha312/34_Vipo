@@ -1,0 +1,79 @@
+{
+    "custom_fonts": [],
+    "variables": {
+      "light": {
+        "--background": "0 0% 100%",
+        "--foreground": "0 0% 5%",
+  
+        "--card": "0 0% 100%",
+        "--card-foreground": "0 0% 5%",
+        "--popover": "0 0% 100%",
+        "--popover-foreground": "0 0% 5%",
+  
+        "--primary": "228.84 84.31% 30%",
+        "--primary-foreground": "0 0% 100%",
+        "--ring": "228.84 84.31% 30%",
+  
+        "--secondary": "236.55 62.59% 27.25%",
+        "--secondary-foreground": "0 0% 100%",
+  
+        "--accent": "44.21 100.00% 48.43%",
+        "--accent-foreground": "0 0% 7%",
+  
+        "--muted": "208.24 7.30% 45.69%",
+        "--muted-foreground": "0 0% 35%",
+  
+        "--border": "0 0% 80%",
+        "--input": "0 0% 80%",
+        "--radius": "0.75rem",
+  
+        "--sidebar-background": "0 0% 100%",
+        "--sidebar-foreground": "0 0% 10%",
+        "--sidebar-primary": "236.55 62.59% 27.25%",
+        "--sidebar-primary-foreground": "0 0% 100%",
+        "--sidebar-accent": "44.21 100.00% 48.43%",
+        "--sidebar-accent-foreground": "0 0% 7%",
+        "--sidebar-border": "0 0% 80%",
+        "--sidebar-ring": "228.84 84.31% 30%",
+        "--icon-color": "0 0% 25%"
+      },
+  
+      "dark": {
+        "--background": "0 0% 9%",
+        "--foreground": "0 0% 98%",
+  
+        "--card": "0 0% 13%",
+        "--card-foreground": "0 0% 98%",
+        "--popover": "0 0% 13%",
+        "--popover-foreground": "0 0% 98%",
+  
+        "--primary": "228.84 84.31% 45%",
+        "--primary-foreground": "0 0% 100%",
+        "--ring": "228.84 84.31% 45%",
+  
+        "--secondary": "236.55 62.59% 27.25%",
+        "--secondary-foreground": "0 0% 100%",
+  
+        "--accent": "44.21 100.00% 48.43%",
+        "--accent-foreground": "0 0% 7%",
+  
+        "--muted": "208.24 7.30% 35%",
+        "--muted-foreground": "0 0% 92%",
+  
+        "--border": "0 0% 20%",
+        "--input": "0 0% 20%",
+        "--radius": "0.75rem",
+  
+        "--sidebar-background": "0 0% 9%",
+        "--sidebar-foreground": "0 0% 98%",
+        "--sidebar-primary": "228.84 84.31% 45%",
+        "--sidebar-primary-foreground": "0 0% 100%",
+        "--sidebar-accent": "44.21 100.00% 48.43%",
+        "--sidebar-accent-foreground": "0 0% 7%",
+        "--sidebar-border": "0 0% 20%",
+        "--sidebar-ring": "228.84 84.31% 45%",
+        "--icon-color": "0 0% 85%"
+      }
+    }
+  }
+  

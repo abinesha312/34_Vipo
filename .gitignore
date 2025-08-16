@@ -22,9 +22,7 @@ build/
 # Node.js
 node_modules/
 
-# Chainlit
-.chainlit/
-config.toml
+
 
 # Chroma database
 .chroma/

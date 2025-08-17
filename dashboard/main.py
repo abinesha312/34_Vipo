@@ -32,7 +32,7 @@ EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 # S3 settings
 S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME", "vipo-documents")
 S3_REGION = os.environ.get("AWS_REGION", "us-east-1")
-S3_PREFIX = "documents/"  # Folder prefix in S3
+S3_PREFIX = "documents/"  # Folder prefix in S3 - must end with /
 
 # Ensure ChromaDB directory exists
 CHROMA_DIR.mkdir(parents=True, exist_ok=True)
@@ -47,8 +47,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create static directory if it doesn't exist
-static_dir = Path("static")
+# Create static directory if it doesn't exist and use absolute path
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+static_dir = Path(os.path.join(script_dir, "static"))
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
@@ -66,9 +68,130 @@ async def favicon():
 # S3 Client
 # =============================================================================
 def get_s3_client():
-    """Get S3 client with credentials from environment variables or instance profile"""
+    """Get S3 client with credentials from environment variables, AWS CLI config, or instance profile"""
     try:
-        return boto3.client('s3', region_name=S3_REGION)
+        # First try creating a client without explicit credentials
+        # This will use credentials from environment variables, AWS config files, or instance profiles
+        try:
+            # Test if we can get caller identity
+            test_client = boto3.client('sts', region_name=S3_REGION)
+            test_client.get_caller_identity()
+            print("Found AWS credentials from config or environment")
+            return boto3.client('s3', region_name=S3_REGION)
+        except Exception as e:
+            print(f"Could not use existing AWS config: {e}")
+        
+        # Fall back to checking environment variables directly
+        aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        
+        if not aws_access_key or not aws_secret_key:
+            print("WARNING: AWS credentials not found in environment variables.")
+            print("Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in your environment.")
+            print("Using local file system as a fallback...")
+            
+            # Create a mock S3 client that uses local filesystem instead
+            from unittest.mock import MagicMock
+            mock_client = MagicMock()
+            
+            # Create documents directory if it doesn't exist
+            documents_dir = Path("./documents").resolve()
+            documents_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Mock S3 operations to use local filesystem
+            def mock_list_objects(**kwargs):
+                bucket = kwargs.get('Bucket')
+                prefix = kwargs.get('Prefix', '')
+                base_dir = Path("./documents")
+                files = list(base_dir.glob("*.*"))
+                contents = []
+                for file in files:
+                    if file.name == "chunks.json":
+                        continue
+                    contents.append({
+                        'Key': f"{prefix}{file.name}",
+                        'Size': file.stat().st_size,
+                        'LastModified': datetime.fromtimestamp(file.stat().st_mtime)
+                    })
+                return {'Contents': contents} if contents else {}
+            
+            def mock_get_object(**kwargs):
+                key = kwargs.get('Key')
+                filename = Path(key).name
+                file_path = Path("./documents") / filename
+                
+                if not file_path.exists():
+                    if filename == "chunks.json":
+                        # Create empty chunks.json if it doesn't exist
+                        file_path.write_text("[]")
+                    else:
+                        # For other files, raise NoSuchKey error
+                        error_response = {'Error': {'Code': 'NoSuchKey', 'Message': 'The specified key does not exist.'}}
+                        raise ClientError(error_response, 'GetObject')
+                
+                class MockBody:
+                    def read(self):
+                        return file_path.read_bytes()
+                
+                return {'Body': MockBody()}
+            
+            def mock_put_object(**kwargs):
+                key = kwargs.get('Key')
+                body = kwargs.get('Body')
+                filename = Path(key).name
+                file_path = Path("./documents") / filename
+                
+                if isinstance(body, bytes):
+                    file_path.write_bytes(body)
+                else:
+                    file_path.write_text(body)
+                return {}
+            
+            def mock_download_file(bucket, key, filename):
+                src_path = Path("./documents") / Path(key).name
+                if src_path.exists():
+                    import shutil
+                    shutil.copy2(src_path, filename)
+                else:
+                    raise FileNotFoundError(f"File {src_path} not found")
+            
+            def mock_delete_object(**kwargs):
+                key = kwargs.get('Key')
+                filename = Path(key).name
+                file_path = Path("./documents") / filename
+                if file_path.exists():
+                    file_path.unlink()
+                return {}
+            
+            def mock_head_object(**kwargs):
+                key = kwargs.get('Key')
+                filename = Path(key).name
+                file_path = Path("./documents") / filename
+                if not file_path.exists():
+                    error_response = {'Error': {'Code': '404', 'Message': 'Not Found'}}
+                    raise ClientError(error_response, 'HeadObject')
+                return {}
+            
+            def mock_head_bucket(**kwargs):
+                # Always succeed for local filesystem
+                return {}
+            
+            # Assign mock methods
+            mock_client.list_objects_v2 = mock_list_objects
+            mock_client.get_object = mock_get_object
+            mock_client.put_object = mock_put_object
+            mock_client.download_file = mock_download_file
+            mock_client.delete_object = mock_delete_object
+            mock_client.head_object = mock_head_object
+            mock_client.head_bucket = mock_head_bucket
+            
+            return mock_client
+        
+        # If we have credentials, use the real S3 client
+        return boto3.client('s3', 
+                           region_name=S3_REGION,
+                           aws_access_key_id=aws_access_key,
+                           aws_secret_access_key=aws_secret_key)
     except Exception as e:
         print(f"Error creating S3 client: {e}")
         raise
@@ -89,40 +212,67 @@ def load_pdf_from_s3(s3_client, bucket: str, key: str):
     """Load a PDF from S3 with fallback loader using temporary files."""
     filename = Path(key).name
     
-    # Create a temporary file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-        temp_path = temp_file.name
+    # Generate a unique temporary path
+    import uuid
+    temp_dir = tempfile.gettempdir()
+    unique_filename = f"vipo_temp_{uuid.uuid4().hex}.pdf"
+    temp_path = os.path.join(temp_dir, unique_filename)
+    
+    try:
+        print(f"Downloading {filename} to temporary file: {temp_path}")
+        # Download to temp file
+        s3_client.download_file(bucket, key, temp_path)
+        
+        # Try PyPDFLoader first
         try:
-            # Download to temp file
-            s3_client.download_file(bucket, key, temp_path)
+            print(f"Loading PDF with PyPDFLoader: {filename}")
+            docs = PyPDFLoader(temp_path).load()
+        except Exception as e:
+            print(f"PyPDF failed for {filename}: {e}")
+            print(f"Trying UnstructuredPDFLoader as fallback")
+            docs = UnstructuredPDFLoader(temp_path).load()
             
-            # Try PyPDFLoader first
-            try:
-                docs = PyPDFLoader(temp_path).load()
-            except Exception as e:
-                print(f"PyPDF failed for {filename}: {e}")
-                docs = UnstructuredPDFLoader(temp_path).load()
-                
-            # Update metadata
-            for d in docs:
-                d.metadata.update({"source": filename, "path": key})
-                
-            return docs
+        # Update metadata
+        for d in docs:
+            d.metadata.update({"source": filename, "path": key})
             
-        finally:
-            # Always clean up the temp file
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
+        print(f"Successfully loaded {len(docs)} pages from {filename}")
+        return docs
+        
+    except Exception as e:
+        print(f"Error loading PDF from S3: {e}")
+        raise
+    finally:
+        # Always clean up the temp file
+        try:
+            if os.path.exists(temp_path):
+                print(f"Cleaning up temporary file: {temp_path}")
+                # Try multiple times with delays to handle Windows file locking
+                max_attempts = 3
+                for attempt in range(max_attempts):
+                    try:
+                        os.unlink(temp_path)
+                        print(f"Successfully deleted temporary file on attempt {attempt+1}")
+                        break
+                    except Exception as e:
+                        if attempt < max_attempts - 1:
+                            print(f"Failed to delete temp file on attempt {attempt+1}: {e}")
+                            import time
+                            time.sleep(1)  # Wait a bit before retrying
+                        else:
+                            print(f"Could not delete temporary file after {max_attempts} attempts: {e}")
+        except Exception as cleanup_error:
+            print(f"Error during cleanup: {cleanup_error}")
 
 def load_txt_from_s3(s3_client, bucket: str, key: str):
     """Load a text file from S3 directly into memory."""
     try:
         from langchain.schema import Document
+        print(f"Loading text file from S3: {key}")
         response = s3_client.get_object(Bucket=bucket, Key=key)
         text = response['Body'].read().decode('utf-8', errors='ignore')
         filename = Path(key).name
+        print(f"Successfully loaded text file: {filename} ({len(text)} characters)")
         return [Document(page_content=text, metadata={"source": filename, "path": key})]
     except Exception as e:
         print(f"Error loading text from S3: {e}")
@@ -161,19 +311,29 @@ def get_chunk_count_for_file(s3_client, filename: str) -> int:
 def list_s3_documents(s3_client):
     """List all documents in the S3 bucket with prefix"""
     try:
+        print(f"Listing documents in S3 bucket: {S3_BUCKET_NAME}, prefix: {S3_PREFIX}")
         response = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=S3_PREFIX)
         documents = []
         
         if 'Contents' in response:
+            print(f"Found {len(response['Contents'])} objects in bucket")
             for item in response['Contents']:
                 key = item['Key']
                 # Skip the prefix directory itself and chunks.json
                 if key.endswith('/') or key.endswith('chunks.json'):
+                    print(f"Skipping {key} (directory or chunks.json)")
+                    continue
+                
+                # Make sure the key is directly under the documents/ prefix
+                # This ensures we only list files in the documents/ folder, not in subfolders
+                if key.count('/') > 1:
+                    print(f"Skipping {key} (in subfolder)")
                     continue
                     
                 filename = Path(key).name
                 file_type = "PDF" if filename.lower().endswith(".pdf") else "TXT" if filename.lower().endswith(".txt") else "Unknown"
                 
+                print(f"Adding document: {filename}, type: {file_type}, size: {item['Size']} bytes")
                 documents.append({
                     "name": filename,
                     "type": file_type,
@@ -181,7 +341,10 @@ def list_s3_documents(s3_client):
                     "modified": item['LastModified'].isoformat(),
                     "s3_key": key
                 })
+        else:
+            print(f"No objects found in bucket with prefix {S3_PREFIX}")
                 
+        print(f"Total documents found: {len(documents)}")
         return documents
     except Exception as e:
         print(f"Error listing S3 documents: {e}")
@@ -236,7 +399,7 @@ def ingest_files_to_chroma(s3_client, file_keys: List[str]):
 
     vectordb.add_texts(texts=texts, metadatas=metas)
 
-    # Store chunks manifest in S3
+    # Store chunks manifest in S3 or local file system
     try:
         # First try to get existing manifest if it exists
         try:
@@ -247,6 +410,17 @@ def ingest_files_to_chroma(s3_client, file_keys: List[str]):
         except ClientError as e:
             if e.response['Error']['Code'] != 'NoSuchKey':
                 raise
+        except Exception as e:
+            print(f"Warning: Error reading chunks.json: {e}")
+            # If we're using local filesystem, try to read the file directly
+            chunks_path = Path("./documents/chunks.json")
+            if chunks_path.exists():
+                try:
+                    old_data = json.loads(chunks_path.read_text(encoding="utf-8"))
+                    old_data.extend(json_records)
+                    json_records = old_data
+                except Exception as e2:
+                    print(f"Warning: Could not read local chunks.json: {e2}")
         
         # Upload updated manifest to S3
         s3_client.put_object(
@@ -255,9 +429,16 @@ def ingest_files_to_chroma(s3_client, file_keys: List[str]):
             Body=json.dumps(json_records, ensure_ascii=False, indent=2).encode('utf-8'),
             ContentType='application/json'
         )
-        print(f"Updated chunks.json in S3")
+        print(f"Updated chunks.json")
     except Exception as e:
-        print(f"Warning: Could not update chunks.json in S3: {e}")
+        print(f"Warning: Could not update chunks.json: {e}")
+        # If using local filesystem, try to write directly
+        try:
+            chunks_path = Path("./documents/chunks.json")
+            chunks_path.write_text(json.dumps(json_records, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"Updated local chunks.json")
+        except Exception as e2:
+            print(f"Warning: Could not update local chunks.json: {e2}")
 
     return len(file_keys), len(chunks)
 
@@ -274,24 +455,48 @@ async def upload_files(files: List[UploadFile] = File(...), s3_client = Depends(
             if not file.filename.lower().endswith((".pdf", ".txt")):
                 continue
                 
-            # Read file into memory
-            file_content = await file.read()
-            
-            # Upload directly to S3 from memory
-            s3_key = f"{S3_PREFIX}{file.filename}"
-            s3_client.put_object(
-                Bucket=S3_BUCKET_NAME, 
-                Key=s3_key, 
-                Body=file_content,
-                ContentType='application/pdf' if file.filename.lower().endswith('.pdf') else 'text/plain'
-            )
-            uploaded_keys.append(s3_key)
+            try:
+                # Read file into memory
+                file_content = await file.read()
+                
+                # Log file info
+                print(f"Uploading file: {file.filename}, size: {len(file_content)} bytes")
+                
+                # Check if bucket exists
+                try:
+                    s3_client.head_bucket(Bucket=S3_BUCKET_NAME)
+                    print(f"Bucket {S3_BUCKET_NAME} exists and is accessible")
+                except Exception as bucket_error:
+                    print(f"Error checking bucket: {bucket_error}")
+                    raise
+                
+                # Upload directly to S3 from memory
+                s3_key = f"{S3_PREFIX}{file.filename}"
+                print(f"Uploading to S3 key: {s3_key}")
+                
+                s3_client.put_object(
+                    Bucket=S3_BUCKET_NAME, 
+                    Key=s3_key, 
+                    Body=file_content,
+                    ContentType='application/pdf' if file.filename.lower().endswith('.pdf') else 'text/plain'
+                )
+                print(f"Successfully uploaded file to S3: {s3_key}")
+                uploaded_keys.append(s3_key)
+            except Exception as file_error:
+                print(f"Error uploading file {file.filename}: {file_error}")
+                raise
 
         if not uploaded_keys:
             raise HTTPException(status_code=400, detail="No valid PDF/TXT files uploaded")
 
         # Ingest the uploaded files
-        file_count, chunk_count = ingest_files_to_chroma(s3_client, uploaded_keys)
+        print(f"Starting ingestion of {len(uploaded_keys)} files")
+        try:
+            file_count, chunk_count = ingest_files_to_chroma(s3_client, uploaded_keys)
+            print(f"Ingestion complete: {file_count} files, {chunk_count} chunks")
+        except Exception as ingest_error:
+            print(f"Error during ingestion: {ingest_error}")
+            raise
 
         return {
             "message": f"Uploaded and ingested {file_count} file(s) into vector store",
@@ -301,12 +506,18 @@ async def upload_files(files: List[UploadFile] = File(...), s3_client = Depends(
         }
 
     except Exception as e:
+        import traceback
+        print(f"Upload/ingest error: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Upload/ingest error: {e}")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
-    with open("templates/index.html", "r", encoding="utf-8") as f:
+    # Use absolute path to find the template
+    import os
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates/index.html")
+    with open(template_path, "r", encoding="utf-8") as f:
         return HTMLResponse(content=f.read())
 
 
@@ -505,16 +716,74 @@ async def check_s3_connection(s3_client = Depends(get_s3_client)):
     try:
         # Check if bucket exists
         s3_client.head_bucket(Bucket=S3_BUCKET_NAME)
+        print(f"Bucket {S3_BUCKET_NAME} exists")
         
         # List objects to verify access
-        response = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME, MaxKeys=1)
+        response = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME, MaxKeys=20)
+        
+        # Check if prefix directory exists
+        prefix_exists = False
+        objects = []
+        if 'Contents' in response:
+            objects = [item['Key'] for item in response['Contents']]
+            print(f"Found objects in bucket: {objects}")
+            for key in objects:
+                if key == S3_PREFIX:
+                    prefix_exists = True
+                    break
+        
+        # Create prefix directory if it doesn't exist
+        if not prefix_exists:
+            print(f"Creating prefix directory: {S3_PREFIX}")
+            s3_client.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=S3_PREFIX,
+                Body=''
+            )
+            print(f"Created prefix directory: {S3_PREFIX}")
+        
+        # Check for chunks.json file
+        chunks_json_exists = False
+        chunks_json_key = f"{S3_PREFIX}chunks.json"
+        for key in objects:
+            if key == chunks_json_key:
+                chunks_json_exists = True
+                break
+        
+        # Create empty chunks.json if it doesn't exist
+        if not chunks_json_exists:
+            print(f"Creating empty chunks.json file")
+            s3_client.put_object(
+                Bucket=S3_BUCKET_NAME,
+                Key=chunks_json_key,
+                Body='[]',
+                ContentType='application/json'
+            )
+            print(f"Created empty chunks.json file")
+        
+        # List only documents in the documents/ folder
+        docs_response = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME, Prefix=S3_PREFIX)
+        document_files = []
+        if 'Contents' in docs_response:
+            for item in docs_response['Contents']:
+                key = item['Key']
+                if key != S3_PREFIX and not key.endswith('chunks.json'):
+                    document_files.append({
+                        'key': key,
+                        'size': item['Size'],
+                        'modified': item['LastModified'].isoformat()
+                    })
         
         return {
             "status": "success",
             "message": f"Successfully connected to S3 bucket: {S3_BUCKET_NAME}",
             "region": S3_REGION,
             "bucket": S3_BUCKET_NAME,
-            "prefix": S3_PREFIX
+            "prefix": S3_PREFIX,
+            "prefix_exists": prefix_exists,
+            "chunks_json_exists": chunks_json_exists,
+            "document_files": document_files,
+            "all_objects": objects
         }
     except ClientError as e:
         error_code = e.response['Error']['Code']
@@ -548,7 +817,33 @@ if __name__ == "__main__":
     print("Starting Vipo Knowledge Base Dashboard...")
     print(f"S3 Bucket: {S3_BUCKET_NAME}/{S3_PREFIX}")
     print(f"ChromaDB directory: {CHROMA_DIR}")
-    print("Dashboard available at: http://localhost:8090")
+    
+    # Check if AWS credentials are available from any source
+    aws_creds_available = False
+    try:
+        # Test if we can get caller identity
+        test_client = boto3.client('sts')
+        test_client.get_caller_identity()
+        aws_creds_available = True
+        print("\nAWS credentials found in config or environment.")
+        print(f"Using S3 bucket: {S3_BUCKET_NAME}")
+    except Exception:
+        aws_creds_available = False
+    
+    if not aws_creds_available:
+        print("\nWARNING: AWS credentials not found!")
+        print("To use S3 storage, please set the following environment variables:")
+        print("  - AWS_ACCESS_KEY_ID")
+        print("  - AWS_SECRET_ACCESS_KEY")
+        print("  - AWS_REGION (optional, defaults to us-east-1)")
+        print("  - S3_BUCKET_NAME (optional, defaults to vipo-documents)")
+        print("\nFalling back to local file system for document storage.")
+        print("Documents will be stored in ./documents/ directory.")
+        
+        # Create documents directory
+        Path("./documents").mkdir(parents=True, exist_ok=True)
+    
+    print("\nDashboard available at: http://localhost:8090")
     uvicorn.run(app, host="0.0.0.0", port=8090, reload=False)# # app.py (FastAPI backend with integrated chunking + Chroma ingest)
 
 # from fastapi import FastAPI, File, UploadFile, HTTPException
